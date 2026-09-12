@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Divide, Consult, Conquer: Capability Laundering Through Aligned LLMs</title>
+<meta name="description" content="Capability laundering: a weaker, unaligned model splits a harmful task into benign-looking subproblems, consults a stronger aligned model on each, and combines the answers locally. Project page.">
+<style>
+  :root {
+    color-scheme: light;
+    --page:          #f9f9f7;
+    --surface:       #fcfcfb;
+    --ink:           #0b0b0b;
+    --ink-2:         #52514e;
+    --ink-muted:     #898781;
+    --hairline:      #e1e0d9;
+    --border:        rgba(11,11,11,0.10);
+    --consultant:    #2a78d6;   /* blue: aligned frontier / consultant */
+    --orchestrator:  #eb6834;   /* orange: unaligned orchestrator */
+    --danger:        #d03b3b;   /* status critical: refusal / prohibited */
+    --danger-wash:   rgba(208,59,59,0.07);
+    --consult-wash:  rgba(42,120,214,0.07);
+    --orch-wash:     rgba(235,104,52,0.08);
+    --accent:        #2a78d6;
+    --good:          #006300;
+    --figure-surface:#ffffff;
+    --figure-ink:    #18212b;
+    --figure-muted:  #65717e;
+    --figure-border: #dce2e8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page:          #0d0d0d;
+      --surface:       #1a1a19;
+      --ink:           #ffffff;
+      --ink-2:         #c3c2b7;
+      --ink-muted:     #898781;
+      --hairline:      #2c2c2a;
+      --border:        rgba(255,255,255,0.10);
+      --consultant:    #3987e5;
+      --orchestrator:  #d95926;
+      --danger:        #e66767;
+      --danger-wash:   rgba(230,103,103,0.10);
+      --consult-wash:  rgba(57,135,229,0.10);
+      --orch-wash:     rgba(217,89,38,0.11);
+      --accent:        #3987e5;
+      --good:          #0ca30c;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.6;
+    font-size: 17px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- hero ---------- */
+  header { text-align: center; padding: 64px 0 32px; }
+  h1 {
+    font-size: clamp(34px, 5.5vw, 52px);
+    line-height: 1.12;
+    margin: 0 0 10px;
+    letter-spacing: -0.02em;
+  }
+  .subtitle {
+    font-size: clamp(17px, 2.4vw, 21px);
+    color: var(--ink-2);
+    max-width: 720px;
+    margin: 0 auto 26px;
+  }
+  .authors { font-size: 17px; margin: 0 0 4px; }
+  .authors a { color: var(--accent); text-decoration: none; }
+  .authors a:hover { text-decoration: underline; }
+  .authors sup, .affil sup { font-size: 11px; font-weight: 700; padding: 0 1px; }
+  .affil { color: var(--ink-2); font-size: 15px; margin: 0 0 24px; }
+  .links { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 8px 18px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 15px; font-weight: 600;
+    text-decoration: none;
+    transition: border-color .15s ease;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--ink); color: var(--page); border-color: transparent; }
+  .btn.primary:hover { opacity: .88; }
+  .btn[aria-disabled="true"] { opacity: .5; pointer-events: none; }
+
+  /* ---------- stat row ---------- */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin: 40px 0 8px;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px 12px;
+    text-align: center;
+  }
+  .stat .label {
+    min-height: 3em;
+    color: var(--ink-2);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: .01em;
+    line-height: 1.5;
+    text-align: center;
+  }
+  .stat .model { display: block; font-size: 12.5px; color: var(--ink); }
+  .stat .value { font-size: 32px; font-weight: 650; line-height: 1.15; margin: 2px 0 0; white-space: nowrap; }
+  .stat .detail { min-height: 3em; font-size: 13px; color: var(--ink-muted); line-height: 1.5; margin-top: 2px; }
+  .stats-note { font-size: 13px; color: var(--ink-muted); text-align: center; margin: 10px 0 0; }
+
+  /* ---------- sections ---------- */
+  section { padding: 22px 0 4px; }
+  h2 {
+    font-size: 26px; letter-spacing: -0.01em;
+    margin: 0 0 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--hairline);
+  }
+  h3.subhead { font-size: 21px; letter-spacing: -0.01em; margin: 26px 0 14px; }
+  p { margin: 0 0 14px; }
+  .lead { font-size: 18px; }
+  ul { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 8px; }
+  strong { font-weight: 650; }
+  .muted { color: var(--ink-2); }
+
+  /* ---------- figures ---------- */
+  figure {
+    margin: 22px 0;
+    background: var(--figure-surface);
+    border: 1px solid var(--figure-border);
+    border-radius: 8px;
+    padding: 14px 14px 8px;
+  }
+  figure picture { display: block; }
+  figure img { width: 100%; height: auto; display: block; border-radius: 4px; }
+  figcaption {
+    margin-top: 10px;
+    border-top: 1px solid var(--figure-border);
+    padding: 10px 4px 4px;
+    color: var(--figure-muted);
+    font-size: 14px;
+  }
+  figcaption strong { color: var(--figure-ink); }
+  .figure-compact { max-width: calc((100% - 14px) / 2); margin-inline: auto; }
+  @media (max-width: 720px) { .figure-compact { max-width: none; } }
+
+  .diagram-card {
+    margin: 22px 0;
+    --surface: var(--figure-surface);
+    --ink: var(--figure-ink);
+    --ink-2: var(--figure-muted);
+    --ink-muted: #8993a0;
+    --consultant: #2a78d6;
+    --orchestrator: #eb6834;
+    --danger: #d03b3b;
+    --danger-wash: rgba(208,59,59,0.07);
+    --consult-wash: rgba(42,120,214,0.07);
+    --orch-wash: rgba(235,104,52,0.08);
+    background: var(--figure-surface);
+    border: 1px solid var(--figure-border);
+    border-radius: 8px;
+    padding: 14px 14px 8px;
+  }
+  .diagram-card svg { width: 100%; height: auto; display: block; border-radius: 4px; }
+  .diagram-caption {
+    margin: 10px 0 0;
+    border-top: 1px solid var(--figure-border);
+    padding: 10px 6px 4px;
+    color: var(--figure-muted);
+    font-size: 14px;
+  }
+  .diagram-caption strong { color: var(--figure-ink); }
+
+  /* candidate-rule chips */
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 18px; }
+  .chip {
+    flex: 1 1 200px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 14.5px;
+  }
+  .chip .tag {
+    display: inline-block;
+    font-size: 12px; font-weight: 700; letter-spacing: .04em;
+    border-radius: 4px; padding: 1px 8px; margin-bottom: 6px;
+    border: 1px solid currentColor;
+  }
+  .tag.pass   { color: var(--good); background: transparent; }
+  .tag.refuse { color: var(--danger); }
+  .tag.fail   { color: var(--danger); }
+  .chip .who { display: block; font-weight: 650; margin-bottom: 2px; }
+
+  /* bibtex */
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--ink-2);
+  }
+
+  footer {
+    border-top: 1px solid var(--hairline);
+    margin-top: 48px;
+    padding: 24px 0 40px;
+    font-size: 14px;
+    color: var(--ink-muted);
+    text-align: center;
+  }
+
+  /* ---------- SVG diagram text ---------- */
+  .d-title  { font: 600 15px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--ink); }
+  .d-label  { font: 600 13px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--ink); }
+  .d-sub    { font: 400 11.5px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--ink-2); }
+  .d-edge   { font: 600 11px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--ink-muted); }
+  .d-scope  { font: 700 10.5px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--consultant); letter-spacing: .06em; }
+  .d-danger-label { font: 700 13px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--danger); }
+  .box-plain   { fill: var(--surface); stroke: var(--ink-muted); stroke-width: 1.1; }
+  .box-consult { fill: var(--consult-wash); stroke: var(--consultant); stroke-width: 1.3; }
+  .box-orch    { fill: var(--orch-wash); stroke: var(--orchestrator); stroke-width: 1.3; }
+  .box-danger  { fill: var(--danger-wash); stroke: var(--danger); stroke-width: 1.3; }
+  .flow  { stroke: var(--ink-muted); stroke-width: 1.4; fill: none; }
+  .flow-orch { stroke: var(--orchestrator); stroke-width: 1.4; fill: none; }
+  .flow-danger { stroke: var(--danger); stroke-width: 1.5; fill: none; }
+  .scope-box { fill: none; stroke: var(--consultant); stroke-width: 1.1; stroke-dasharray: 5 4; opacity: .75; }
+  .hidden-edge { stroke: var(--orchestrator); stroke-width: 1.3; stroke-dasharray: 5 4; fill: none; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- ============================ HERO ============================ -->
+  <header>
+    <h1>Divide, Consult, Conquer: Capability Laundering Through Aligned LLMs</h1>
+    <p class="subtitle">Alignment that holds over a whole task can fail when the task is split into
+      fragments that are each permitted.</p>
+
+    <p class="authors"><a href="mailto:Mark.Russinovich@microsoft.com">Mark Russinovich</a><sup>1</sup>,
+      <a href="mailto:bbullwinkel@microsoft.com">Blake Bullwinkel</a><sup>2</sup>,
+      <a href="mailto:gseveri@microsoft.com">Giorgio Severi</a><sup>2</sup>,
+      <a href="mailto:covadiuc@microsoft.com">Cristian Ovadiuc</a><sup>2</sup>,
+      <a href="mailto:ahmsalem@microsoft.com">Ahmed Salem</a><sup>3</sup></p>
+    <p class="affil"><sup>1</sup>Microsoft Azure &middot; <sup>2</sup>Microsoft &middot;
+      <sup>3</sup>Microsoft Security Response Center</p>
+
+    <nav class="links" aria-label="Paper resources">
+      <!-- TODO: fill arXiv href and artifact-access link before publishing -->
+      <a class="btn primary" href="#" aria-disabled="true">📄 arXiv</a>
+      <a class="btn" href="#artifacts">Artifact access</a>
+      <a class="btn" href="#bibtex">BibTeX</a>
+    </nav>
+  </header>
+
+  <!-- ============================ STATS ============================ -->
+  <div class="stats" role="list" aria-label="Headline results">
+    <div class="stat" role="listitem">
+      <div class="label">CyBench<span class="model">GPT-5.5</span></div>
+      <div class="value">8&hairsp;/&hairsp;14</div>
+      <div class="detail">uplift candidates recovered</div>
+    </div>
+    <div class="stat" role="listitem">
+      <div class="label">CyBench<span class="model">Opus 4.8</span></div>
+      <div class="value">7&hairsp;/&hairsp;9</div>
+      <div class="detail">uplift candidates recovered</div>
+    </div>
+    <div class="stat" role="listitem">
+      <div class="label">BountyBench<span class="model">GPT-5.5</span></div>
+      <div class="value">3&hairsp;/&hairsp;9</div>
+      <div class="detail">uplift candidates recovered</div>
+    </div>
+    <div class="stat" role="listitem">
+      <div class="label">BountyBench<span class="model">Opus 4.8</span></div>
+      <div class="value">2&hairsp;/&hairsp;3</div>
+      <div class="detail">uplift candidates recovered</div>
+    </div>
+    <div class="stat" role="listitem">
+      <div class="label">CBRN rubric score</div>
+      <div class="value">62 → 83</div>
+      <div class="detail">model alone → consultant-assisted</div>
+    </div>
+  </div>
+  <p class="stats-note">Gemma-4-31B harness. Benchmark results are pass@3; CBRN is a mean score on a
+    100-point rubric. An <em>uplift candidate</em> is a task the raw frontier model solves, the aligned
+    frontier refuses, and the harness fails without a consultant.</p>
+
+  <!-- ============================ ABSTRACT ============================ -->
+  <section id="abstract">
+    <h2>Abstract</h2>
+    <p class="lead">Language model safety is typically evaluated one interaction at a time. We show that a
+      weaker, unaligned model can split a harmful task into benign-looking subproblems, consult a stronger
+      aligned model independently on each, and combine the answers locally. We call this attack
+      <strong>capability laundering</strong>. Unlike a jailbreak, no single response is a harmful task.</p>
+    <p>We measure consultation-aided uplift using tasks that a raw frontier model solves, the aligned
+      frontier refuses, and the harness fails without a consultant. We evaluate GPT-5.5, Claude Opus 4.8,
+      and Grok-4.3 as consultants to four local models on CyBench, BountyBench, and harmful CBRN
+      requests. On CyBench, Gemma-4-31B recovers 8/14 candidates with GPT-5.5 and 7/9 with Opus 4.8,
+      compared with 2/21 and 4/15 for Gemma-4-12B. On BountyBench, Gemma-4-31B recovers 3/9 and 2/3
+      candidates, while Muse-Glimmer-30B recovers none of 22 and 13. For CBRN, we measure uplift across
+      eight steps of a hypothetical bioweapon attack chain and find that consultation raises
+      Gemma-4-31B&rsquo;s mean rubric score from 62.3 to 83.1 on a 100-point rubric scale.</p>
+    <p>Our evaluation deliberately tests two conservative extremes: a small unaligned local model and a
+      frontier consultant behind a strict refusal policy. In practice, more capable unaligned models and
+      weaker guardrails may let a harness recover more of the consultant&rsquo;s raw frontier capability
+      than we measure here.</p>
+    <p>These results expose a gap in current defenses: refusing a harmful task does not prevent frontier
+      capabilities from being transferred and composed across many individually permitted interactions.</p>
+  </section>
+
+  <!-- ============================ ATTACK ============================ -->
+  <section id="attack">
+    <h2>The attack</h2>
+    <p>A locally hosted, <strong style="color:var(--orchestrator)">unaligned small model</strong> drives a
+      local <strong>harness</strong>: it retains the objective, inspects the environment, identifies
+      missing steps, controls what context to reveal, and integrates the answers. A stronger,
+      policy-aligned frontier model acts as the
+      <strong style="color:var(--consultant)">consultant</strong>, receiving only delegated technical
+      fragments &mdash; a calculation, a parser rule, a material property, a protocol constraint, a small
+      routine. The harness knows <em>why</em> the computation is being performed; the consultant sees
+      only the fragments it is asked to solve.</p>
+
+    <div class="diagram-card">
+      <svg viewBox="0 0 900 470" role="img"
+           aria-label="Diagram comparing direct access, where the aligned frontier model sees the complete task and refuses, with capability laundering, where an unaligned harness splits the task into benign-looking subtasks, an aligned consultant answers each fragment, and local composition assembles the prohibited capability outside the consultant's view.">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--ink-muted)"/>
+          </marker>
+          <marker id="arr-orch" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--orchestrator)"/>
+          </marker>
+          <marker id="arr-danger" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--danger)"/>
+          </marker>
+        </defs>
+
+        <!-- ===== Panel (a): direct access ===== -->
+        <text class="d-title" x="10" y="24">(a) Direct access &mdash; complete objective visible</text>
+
+        <rect class="box-plain" x="10" y="46" width="200" height="62" rx="7"/>
+        <text class="d-label" x="110" y="72" text-anchor="middle">Complete task</text>
+        <text class="d-sub"   x="110" y="92" text-anchor="middle">prohibited objective + context</text>
+
+        <rect class="box-consult" x="340" y="46" width="210" height="62" rx="7"/>
+        <text class="d-label" x="445" y="72" text-anchor="middle">Aligned frontier model</text>
+        <text class="d-sub"   x="445" y="92" text-anchor="middle">full task visible to policy</text>
+
+        <rect class="box-danger" x="690" y="46" width="200" height="62" rx="7"/>
+        <text class="d-danger-label" x="790" y="72" text-anchor="middle">✕ REFUSAL</text>
+        <text class="d-sub" x="790" y="92" text-anchor="middle">capability withheld</text>
+
+        <line class="flow" x1="210" y1="77" x2="336" y2="77" marker-end="url(#arr)"/>
+        <text class="d-edge" x="273" y="68" text-anchor="middle">complete task</text>
+        <line class="flow" x1="550" y1="77" x2="686" y2="77" marker-end="url(#arr)"/>
+        <text class="d-edge" x="618" y="68" text-anchor="middle">policy decision</text>
+
+        <!-- ===== Panel (b): capability laundering ===== -->
+        <text class="d-title" x="10" y="168">(b) Capability laundering &mdash; fragments visible, composition hidden</text>
+
+        <!-- consultant-view scope -->
+        <rect class="scope-box" x="255" y="188" width="635" height="130" rx="8"/>
+        <text class="d-scope" x="572" y="205" text-anchor="middle">CONSULTANT VIEW · OBJECTIVE AND TASK CONTEXT OMITTED</text>
+
+        <rect class="box-orch" x="10" y="216" width="185" height="76" rx="7"/>
+        <text class="d-label" x="102" y="242" text-anchor="middle">Unaligned harness</text>
+        <text class="d-sub"   x="102" y="261" text-anchor="middle">local SLM</text>
+        <text class="d-sub"   x="102" y="278" text-anchor="middle">full objective + context</text>
+
+        <rect class="box-consult" x="278" y="216" width="170" height="76" rx="7"/>
+        <text class="d-label" x="363" y="242" text-anchor="middle">Benign subtasks</text>
+        <text class="d-sub"   x="363" y="261" text-anchor="middle">calculation · routine</text>
+        <text class="d-sub"   x="363" y="278" text-anchor="middle">property · protocol rule</text>
+
+        <rect class="box-consult" x="530" y="216" width="160" height="76" rx="7"/>
+        <text class="d-label" x="610" y="242" text-anchor="middle">Consultant</text>
+        <text class="d-sub"   x="610" y="261" text-anchor="middle">aligned frontier,</text>
+        <text class="d-sub"   x="610" y="278" text-anchor="middle">policy active</text>
+
+        <rect class="box-plain" x="742" y="216" width="138" height="76" rx="7"/>
+        <text class="d-label" x="811" y="242" text-anchor="middle">Partial answers</text>
+        <text class="d-sub"   x="811" y="261" text-anchor="middle">value · formula</text>
+        <text class="d-sub"   x="811" y="278" text-anchor="middle">procedure</text>
+
+        <line class="flow-orch" x1="195" y1="254" x2="274" y2="254" marker-end="url(#arr-orch)"/>
+        <text class="d-edge" x="234" y="245" text-anchor="middle" style="fill:var(--orchestrator)">split</text>
+        <line class="flow" x1="448" y1="254" x2="526" y2="254" marker-end="url(#arr)"/>
+        <line class="flow" x1="690" y1="254" x2="738" y2="254" marker-end="url(#arr)"/>
+
+        <rect class="box-orch" x="380" y="374" width="215" height="70" rx="7"/>
+        <text class="d-label" x="487" y="399" text-anchor="middle">Local composition</text>
+        <text class="d-sub"   x="487" y="417" text-anchor="middle">supply hidden context ·</text>
+        <text class="d-sub"   x="487" y="432" text-anchor="middle">assemble · operationalize</text>
+
+        <rect class="box-danger" x="682" y="374" width="208" height="70" rx="7"/>
+        <text class="d-danger-label" x="786" y="398" text-anchor="middle">⚠ PROHIBITED CAPABILITY</text>
+        <text class="d-sub" x="786" y="417" text-anchor="middle">assembled outside</text>
+        <text class="d-sub" x="786" y="432" text-anchor="middle">the provider&rsquo;s view</text>
+
+        <path class="flow" d="M 811 292 C 811 340, 660 346, 600 380" marker-end="url(#arr)"/>
+        <path class="hidden-edge" d="M 102 292 C 102 409, 240 409, 376 409" marker-end="url(#arr-orch)"/>
+        <text class="d-edge" x="196" y="390" text-anchor="middle" style="fill:var(--orchestrator)">hidden objective + task state</text>
+        <line class="flow-danger" x1="595" y1="409" x2="678" y2="409" marker-end="url(#arr-danger)"/>
+      </svg>
+      <p class="diagram-caption"><strong>Capability laundering.</strong> Under direct access (a), the aligned
+        frontier model sees the complete objective and refuses. Under decomposed access (b), an unaligned
+        harness retains the objective, translates missing steps into objective-blind consultations, and
+        recombines the returned knowledge locally. Every individual exchange can look like ordinary
+        technical work.</p>
+    </div>
+
+    <p>Unlike a jailbreak, the consultant never performs the harmful task, never produces the final
+      artifact, and never makes an obviously incorrect policy decision. Input and output filters can
+      classify every observed exchange correctly while the composed system remains unsafe &mdash; the state
+      that gives benign-looking fragments their harmful meaning stays outside the provider&rsquo;s
+      observation boundary.</p>
+  </section>
+
+  <!-- ============================ MEASUREMENT ============================ -->
+  <section id="measurement">
+    <h2>Measuring uplift, not benchmark scores</h2>
+    <p>Raw benchmark accuracy conflates what the harness can already do with what consultation adds.
+      We isolate the causal effect of consultation by restricting measurement to
+      <strong>uplift candidates</strong> &mdash; tasks where all three of the following hold:</p>
+
+    <div class="chips">
+      <div class="chip"><span class="tag pass">PASS</span><span class="who">Raw frontier model</span>
+        <span class="muted">solves the task without the alignment policy &mdash; the capability exists.</span></div>
+      <div class="chip"><span class="tag refuse">REFUSE</span><span class="who">Aligned frontier model</span>
+        <span class="muted">refuses the same task under direct access &mdash; alignment withholds it.</span></div>
+      <div class="chip"><span class="tag fail">FAIL</span><span class="who">Harness, no consultant</span>
+        <span class="muted">fails at pass@3 with the consultant disabled &mdash; the local model cannot do it alone.</span></div>
+    </div>
+
+    <p>A candidate is <em>recovered</em> when the same harness solves it once
+      consultation with the aligned frontier model is enabled. A scaffold-parity control (identical
+      harness, consultant disabled) ensures the effect is consultation-caused rather than
+      scaffold-caused.</p>
+
+    <figure>
+      <img src="figs/candidate_sankey_cybench_gpt55.png" loading="lazy"
+           alt="Sankey diagram showing how the CyBench task set is filtered down to the GPT-5.5 uplift-candidate set: tasks the raw frontier model solves, minus tasks the aligned frontier still solves, minus tasks the harness solves without a consultant.">
+      <figcaption><strong>Uplift-candidate construction (CyBench, GPT-5.5).</strong> The full task set is
+        filtered to tasks the raw frontier solves, the aligned frontier refuses, and the harness fails
+        without a consultant &mdash; the remainder is the candidate set on which recovery is measured.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ============================ RESULTS ============================ -->
+  <section id="results">
+    <h2>Results</h2>
+
+    <p><strong>Cybersecurity.</strong> On CyBench (CTF-style tasks spanning cryptography, reverse
+      engineering, forensics, binary and web exploitation), the Gemma-4-31B harness recovers
+      8 of 14 candidates with GPT-5.5 and 7 of 9 with Claude Opus 4.8 at pass@3. On BountyBench&rsquo;s
+      repository-level Exploit workflow it recovers 3 of 9 and 2 of 3. The aligned frontier refused every
+      one of these tasks under direct access.</p>
+
+    <figure class="figure-compact">
+      <img src="figs/cybench_recovery_rates.png" loading="lazy"
+           alt="Bar chart of CyBench recovery rates over each frontier-specific uplift-candidate set, by harness and consultant.">
+      <figcaption><strong>CyBench capability uplift at pass@3.</strong> Recovery over each
+        frontier-specific uplift-candidate set.</figcaption>
+    </figure>
+
+    <figure>
+      <picture>
+        <source media="(max-width: 720px)" srcset="figs/bountybench_overview_mobile.png">
+        <img src="figs/bountybench_overview.png" loading="lazy"
+             alt="BountyBench baseline performance and capability uplift at pass@3, by harness and consultant.">
+      </picture>
+      <figcaption><strong>BountyBench baseline performance and capability uplift at pass@3.</strong>
+        Real-software exploit tasks under the same candidate rule.</figcaption>
+    </figure>
+
+    <p><strong>CBRN.</strong> Across eight steps of a hypothetical bioweapon attack chain (ideation,
+      acquisition, modification, release, evasion), Gemma-4-31B scores 62.3 on its own against a
+      100-point expert-reviewed rubric. The harness with the consultant disabled &mdash; decomposition and
+      rubric context, but no frontier knowledge &mdash; raises that to 75.3, and enabling consultation
+      raises it further to 83.1 with either GPT-5.5 or Grok-4.3. Direct frontier access scores far lower:
+      GPT-5.5 near zero, and Grok-4.3 26.0 under provider-native access. The study was limited to
+      model-generated text and rubric-based assessment &mdash; no acquisition, synthesis, or physical
+      experimentation.</p>
+
+    <figure>
+      <img src="figs/bio-attack-chain-stacked-v3.png" loading="lazy"
+           alt="Hypothetical five-stage biological attack chain: ideation, acquisition, modification, release, and evasion, with the eight evaluated steps highlighted in red.">
+      <figcaption><strong>Hypothetical five-stage biological attack chain.</strong> We evaluated
+        capability uplift across eight representative steps (in red) spanning the five stages.</figcaption>
+    </figure>
+
+    <figure>
+      <img src="figs/cbrn_evals_grouped_box_paper.png" loading="lazy"
+           alt="Grouped box plot of rubric scores across the eight evaluated attack-chain steps, comparing the model alone, the harness without a consultant, and GPT-5.5- or Grok-4.3-assisted conditions, with horizontal lines marking direct-frontier means.">
+      <figcaption><strong>Rubric scores across the eight evaluated attack-chain steps.</strong> Boxes
+        compare the model alone, the harness with the consultant disabled, and the GPT-5.5- and
+        Grok-4.3-assisted conditions. Horizontal lines mark direct-frontier means &mdash; solid with the
+        alignment prompt, dashed for provider-native access.</figcaption>
+    </figure>
+
+    <h3 class="subhead">Key findings</h3>
+    <ul>
+      <li><strong>Alignment that binds directly does not bind through decomposition.</strong> The aligned
+        frontier deterministically refuses these tasks end-to-end, yet answers the laundered fragments
+        that let a weaker model complete them.</li>
+      <li><strong>On the benchmarks, the uplift is consultation-caused.</strong> Candidates are selected
+        so that the same harness fails them with the consultant disabled. Under CBRN&rsquo;s graded
+        scoring, the harness itself accounts for the rise from 62.3 to 75.3, and consultation for the
+        further rise to 83.1.</li>
+      <li><strong>Capability gains were observed across a hypothetical biological attack pathway,</strong>
+        with the largest improvements in dual-use stages where malicious intent was less explicit and
+        direct weaponization requests remained constrained by frontier-model safeguards. Notably, no
+        jailbreaks, prompt attacks, or policy-circumvention techniques were used. The observed uplift
+        resulted solely from task decomposition and consultation, demonstrating that the model safety
+        boundary can be bypassed without bypassing the model&rsquo;s biological refusal policy.</li>
+      <li><strong>Per-exchange filtering is structurally insufficient.</strong> Because the decisive
+        context stays with the harness, classifiers can approve every exchange while the exchanges
+        collectively transfer a withheld capability.</li>
+    </ul>
+  </section>
+
+  <!-- ============================ DEFENSES ============================ -->
+  <section id="defenses">
+    <h2>Defensive implications</h2>
+    <p><strong>Composition-aware monitoring.</strong> Monitor requests jointly rather than classifying
+      each independently: retain provenance across requests, estimate the capabilities already provided,
+      and assess whether a new answer completes a suspicious chain. Such monitors must reason over
+      semantic dependencies (laundering changes vocabulary and distributes the task across abstractions),
+      must distinguish malicious composition from legitimate multi-step engineering, and face an
+      inherently incomplete observation boundary &mdash; attackers can distribute consultations across
+      accounts, providers, and time.</p>
+    <p><strong>Raising the cost of running an unaligned harness.</strong> The attack scales because open-weight
+      models are cheap to unalign (abliteration, fine-tuning) and can automate composition locally. Making
+      open models resistant to inexpensive unalignment raises the operator&rsquo;s required capability and
+      effort &mdash; and unalignment defenses should be judged not just by refusal rates but by whether
+      modified models retain the long-horizon planning needed to direct external assistance.</p>
+    <p><strong>Evaluate composition as its own safety property.</strong> Passing a jailbreak evaluation
+      does not establish safety under decomposition. Model evaluations should include end-to-end tests in
+      which individually permitted assistance is composed outside the model&rsquo;s context, and report
+      the result separately.</p>
+  </section>
+
+  <!-- ============================ ETHICS / ARTIFACTS ============================ -->
+  <section id="artifacts">
+    <h2>Responsible disclosure &amp; artifacts</h2>
+    <p>Before submission, we disclosed the attack and our findings to the affected model providers and
+      other impacted parties, with representative examples and an explanation of why per-request
+      safeguards may not detect the composed attack. We welcome continued engagement, including joint
+      analysis of failure cases and evaluation of proposed defenses.</p>
+    <p>All cybersecurity experiments ran in isolated benchmark environments against containerized
+      challenges or benchmark-provided vulnerable revisions. We did not probe production systems, target
+      third parties, or search for undisclosed vulnerabilities. The CBRN study involved model-generated
+      text and rubric assessment only.</p>
+    <p><strong>What we release.</strong> We publicly release the complete alignment prompt used in our
+      experiments, but not the capability-laundering implementation or automation code &mdash; an
+      unrestricted release would materially reduce the effort required to reproduce the attack at scale.
+      To support scientific verification, we provide the implementation and experimental artifacts to
+      qualified researchers through a controlled-access process; requests are evaluated for a legitimate
+      research purpose.
+      <!-- TODO: link the artifact-request form / contact address -->
+    </p>
+  </section>
+
+  <!-- ============================ BIBTEX ============================ -->
+  <section id="bibtex">
+    <h2>Citation</h2>
+<!-- TODO: finalize venue/eprint before publishing -->
+<pre>@article{russinovich2026capabilitylaundering,
+  title   = {Divide, Consult, Conquer: Capability Laundering
+             Through Aligned LLMs},
+  author  = {Russinovich, Mark and Bullwinkel, Blake and Severi, Giorgio
+             and Ovadiuc, Cristian and Salem, Ahmed},
+  year    = {2026},
+  note    = {Under submission}
+}</pre>
+  </section>
+
+  <footer>
+    Capability Laundering &middot; 2026 &middot; Figures and text on this page are from the paper.
+  </footer>
+
+</div>
+</body>
+</html>
