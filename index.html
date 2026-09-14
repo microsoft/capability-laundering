@@ -256,7 +256,7 @@
   <header>
     <h1>Divide, Consult, Conquer: Capability Laundering Through Aligned LLMs</h1>
     <p class="subtitle">Alignment that holds over a whole task can fail when the task is split into
-      fragments that are each permitted.</p>
+      individually permitted fragments.</p>
 
     <p class="authors"><a href="mailto:Mark.Russinovich@microsoft.com">Mark Russinovich</a><sup>1</sup>,
       <a href="mailto:bbullwinkel@microsoft.com">Blake Bullwinkel</a><sup>2</sup>,
@@ -310,17 +310,19 @@
   <section id="abstract">
     <h2>Abstract</h2>
     <p class="lead">Language model safety is typically evaluated one interaction at a time. We show that a
-      weaker, unaligned model can split a harmful task into benign-looking subproblems, consult a stronger
-      aligned model independently on each, and combine the answers locally. We call this attack
-      <strong>capability laundering</strong>. Unlike a jailbreak, no single response is a harmful task.</p>
-    <p>We measure consultation-aided uplift using tasks that a raw frontier model solves, the aligned
-      frontier refuses, and the harness fails without a consultant. We evaluate GPT-5.5, Claude Opus 4.8,
-      and Grok-4.3 as consultants to four local models on CyBench, BountyBench, and harmful CBRN
-      requests. On CyBench, Gemma-4-31B recovers 8/14 candidates with GPT-5.5 and 7/9 with Opus 4.8,
-      compared with 2/21 and 4/15 for Gemma-4-12B. On BountyBench, Gemma-4-31B recovers 3/9 and 2/3
-      candidates, while Muse-Glimmer-30B recovers none of 22 and 13. For CBRN, we measure uplift across
-      eight steps of a hypothetical bioweapon attack chain and find that consultation raises
-      Gemma-4-31B&rsquo;s mean rubric score from 62.3 to 83.1 on a 100-point rubric scale.</p>
+      weaker, unaligned model can split a harmful objective into benign subtasks, consult a stronger
+      aligned model on each, and combine the answers locally. We call this attack <strong>capability
+      laundering</strong>. Unlike traditional jailbreaks, the aligned model is never asked to perform a
+      harmful task or produce the final artifact.</p>
+    <p>Using this technique, we obtain uplift on cybersecurity and CBRN tasks, where uplift is measured
+      relative to the performance of the local unaligned model and aligned frontier models in isolation.
+      We evaluate GPT-5.5, Claude Opus 4.8, and Grok-4.3 as frontier consultants to four local models on
+      CyBench, BountyBench, and harmful CBRN requests. On CyBench, Gemma-4-31B recovers 8/14 candidates
+      with GPT-5.5 and 7/9 with Opus 4.8, compared with 2/21 and 4/15 for Gemma-4-12B. On BountyBench,
+      Gemma-4-31B recovers 3/9 and 2/3 candidates, while Muse-Glimmer-30B recovers none of 22 and 13. For
+      CBRN, we measure uplift across eight steps of a hypothetical biology attack chain and find that
+      consultation raises Gemma-4-31B&rsquo;s mean rubric score from 62.3 to 83.1 on a 100-point rubric
+      scale.</p>
     <p>Our evaluation deliberately tests two conservative extremes: a small unaligned local model and a
       frontier consultant behind a strict refusal policy. In practice, more capable unaligned models and
       weaker guardrails may let a harness recover more of the consultant&rsquo;s raw frontier capability
@@ -332,14 +334,14 @@
   <!-- ============================ ATTACK ============================ -->
   <section id="attack">
     <h2>The attack</h2>
-    <p>A locally hosted, <strong style="color:var(--orchestrator)">unaligned small model</strong> drives a
-      local <strong>harness</strong>: it retains the objective, inspects the environment, identifies
-      missing steps, controls what context to reveal, and integrates the answers. A stronger,
-      policy-aligned frontier model acts as the
-      <strong style="color:var(--consultant)">consultant</strong>, receiving only delegated technical
-      fragments &mdash; a calculation, a parser rule, a material property, a protocol constraint, a small
-      routine. The harness knows <em>why</em> the computation is being performed; the consultant sees
-      only the fragments it is asked to solve.</p>
+    <p>A locally hosted, <strong style="color:var(--orchestrator)">unaligned small language model
+      (SLM)</strong> drives a local <strong>harness</strong>: it retains the objective, inspects the
+      environment, decomposes the objective into benign fragments, and composes the final answer or
+      action. A stronger, policy-aligned frontier model acts as the
+      <strong style="color:var(--consultant)">consultant</strong>, completing only decomposed subtasks such
+      as a calculation, a parser rule, a material property, a protocol constraint, or a small routine.
+      The local model knows <em>why</em> the computation is being performed, while the consultant sees only
+      the fragments it is asked to solve.</p>
 
     <div class="diagram-card">
       <svg viewBox="0 0 900 470" role="img"
@@ -431,18 +433,19 @@
     </div>
 
     <p>Unlike a jailbreak, the consultant never performs the harmful task, never produces the final
-      artifact, and never makes an obviously incorrect policy decision. Input and output filters can
-      classify every observed exchange correctly while the composed system remains unsafe &mdash; the state
-      that gives benign-looking fragments their harmful meaning stays outside the provider&rsquo;s
-      observation boundary.</p>
+      artifact, and never makes an obviously incorrect policy decision. Input and output filters on the
+      frontier consultant can classify every exchange correctly while the local SLM gathers all the
+      context required to complete the objective. Importantly, the state that reveals benign-looking
+      fragments as harmful stays outside the frontier provider&rsquo;s observation boundary.</p>
   </section>
 
   <!-- ============================ MEASUREMENT ============================ -->
   <section id="measurement">
     <h2>Measuring uplift, not benchmark scores</h2>
-    <p>Raw benchmark accuracy conflates what the harness can already do with what consultation adds.
-      We isolate the causal effect of consultation by restricting measurement to
-      <strong>uplift candidates</strong> &mdash; tasks where all three of the following hold:</p>
+    <p>The raw performance of our end-to-end harness conflates what the unaligned SLM can already do with
+      what the frontier consultant adds. For cyber tasks with a binary outcome, we isolate the causal
+      effect of consultation by restricting measurement to <strong>uplift candidates</strong>, which are
+      tasks where all three of the following hold:</p>
 
     <div class="chips">
       <div class="chip"><span class="tag pass">PASS</span><span class="who">Raw frontier model</span>
@@ -453,10 +456,11 @@
         <span class="muted">fails at pass@3 with the consultant disabled &mdash; the local model cannot do it alone.</span></div>
     </div>
 
-    <p>A candidate is <em>recovered</em> when the same harness solves it once
-      consultation with the aligned frontier model is enabled. A scaffold-parity control (identical
-      harness, consultant disabled) ensures the effect is consultation-caused rather than
-      scaffold-caused.</p>
+    <p>A candidate is <em>recovered</em> when the same harness solves it once consultation with the aligned
+      frontier model is enabled. A scaffold-parity control (identical harness, consultant disabled)
+      ensures the effect is consultation-caused rather than scaffold-caused. For CBRN tasks evaluated
+      using a rubric-based judge, we estimate uplift by measuring the average delta in rubric scores
+      achieved by the local SLM operating with and without access to the frontier consultant.</p>
 
     <figure>
       <img src="figs/candidate_sankey_cybench_gpt55.png" loading="lazy"
@@ -494,14 +498,14 @@
         Real-software exploit tasks under the same candidate rule.</figcaption>
     </figure>
 
-    <p><strong>CBRN.</strong> Across eight steps of a hypothetical bioweapon attack chain (ideation,
-      acquisition, modification, release, evasion), Gemma-4-31B scores 62.3 on its own against a
-      100-point expert-reviewed rubric. The harness with the consultant disabled &mdash; decomposition and
-      rubric context, but no frontier knowledge &mdash; raises that to 75.3, and enabling consultation
-      raises it further to 83.1 with either GPT-5.5 or Grok-4.3. Direct frontier access scores far lower:
-      GPT-5.5 near zero, and Grok-4.3 26.0 under provider-native access. The study was limited to
-      model-generated text and rubric-based assessment &mdash; no acquisition, synthesis, or physical
-      experimentation.</p>
+    <p><strong>CBRN.</strong> Across eight steps of a hypothetical bioweapon attack chain, the unaligned
+      Gemma-4-31B model alone scores an average of 62.3 on 100-point rubrics developed by a CBRN expert.
+      When operating in the harness with the consultant disabled, which adds context on the rubric
+      criteria but no frontier knowledge, the average score increases to 75.3. Enabling consultation
+      raises it further to 83.1 with either GPT-5.5 or Grok-4.3. Due to the strong biosafety policies of
+      frontier providers, the consultant models mostly refuse CBRN requests when prompted directly. The
+      study was limited to model-generated text and rubric-based assessment by LLM judges. No acquisition,
+      synthesis, or physical experimentation was performed.</p>
 
     <figure>
       <img src="figs/bio-attack-chain-stacked-v3.png" loading="lazy"
@@ -521,40 +525,41 @@
 
     <h3 class="subhead">Key findings</h3>
     <ul>
-      <li><strong>Alignment that binds directly does not bind through decomposition.</strong> The aligned
-        frontier deterministically refuses these tasks end-to-end, yet answers the laundered fragments
-        that let a weaker model complete them.</li>
-      <li><strong>On the benchmarks, the uplift is consultation-caused.</strong> Candidates are selected
-        so that the same harness fails them with the consultant disabled. Under CBRN&rsquo;s graded
-        scoring, the harness itself accounts for the rise from 62.3 to 75.3, and consultation for the
-        further rise to 83.1.</li>
-      <li><strong>Capability gains were observed across a hypothetical biological attack pathway,</strong>
-        with the largest improvements in dual-use stages where malicious intent was less explicit and
-        direct weaponization requests remained constrained by frontier-model safeguards. Notably, no
-        jailbreaks, prompt attacks, or policy-circumvention techniques were used. The observed uplift
-        resulted solely from task decomposition and consultation, demonstrating that the model safety
-        boundary can be bypassed without bypassing the model&rsquo;s biological refusal policy.</li>
+      <li><strong>Alignment policies that hold under direct access can be subverted via task
+        decomposition.</strong> Aligned frontier models reliably refuse harmful cyber and CBRN tasks when
+        prompted directly, but they are willing to perform benign subtasks that enable an unaligned SLM
+        to complete the overall objective.</li>
+      <li><strong>Frontier models provide uplift on both cyber and CBRN tasks.</strong> Uplift candidates
+        are selected so that the same harness fails when the consultant is disabled. Under CBRN scoring
+        rubrics, the harness itself accounts for an increase in the average score from 62.3 to 75.3, and
+        consultation increases the average to 83.1.</li>
+      <li><strong>The harness, not just the consultant, limits the attack.</strong> Within the Gemma family,
+        Gemma-4-31B completes many more objectives than Gemma-4-12B: 57% versus 10% with GPT-5.5 on
+        CyBench. Further, Muse-Glimmer-30B recovers six CyBench candidates with either consultant, but
+        none of its 22 and 13 BountyBench candidates. Laundering needs a local model that can effectively
+        decompose, track state, and integrate frontier model outputs.</li>
       <li><strong>Per-exchange filtering is structurally insufficient.</strong> Because the decisive
-        context stays with the harness, classifiers can approve every exchange while the exchanges
-        collectively transfer a withheld capability.</li>
+        context stays with the harness, classifiers can approve every exchange while the unaligned SLM
+        gathers the context required to complete the overall objective.</li>
     </ul>
   </section>
 
   <!-- ============================ DEFENSES ============================ -->
   <section id="defenses">
     <h2>Defensive implications</h2>
-    <p><strong>Composition-aware monitoring.</strong> Monitor requests jointly rather than classifying
-      each independently: retain provenance across requests, estimate the capabilities already provided,
-      and assess whether a new answer completes a suspicious chain. Such monitors must reason over
-      semantic dependencies (laundering changes vocabulary and distributes the task across abstractions),
-      must distinguish malicious composition from legitimate multi-step engineering, and face an
-      inherently incomplete observation boundary &mdash; attackers can distribute consultations across
-      accounts, providers, and time.</p>
-    <p><strong>Raising the cost of running an unaligned harness.</strong> The attack scales because open-weight
-      models are cheap to unalign (abliteration, fine-tuning) and can automate composition locally. Making
-      open models resistant to inexpensive unalignment raises the operator&rsquo;s required capability and
-      effort &mdash; and unalignment defenses should be judged not just by refusal rates but by whether
-      modified models retain the long-horizon planning needed to direct external assistance.</p>
+    <p><strong>Composition-aware monitoring.</strong> Our attack points to the importance of monitoring
+      requests jointly rather than classifying each one independently. Defending against capability
+      laundering likely requires retaining provenance of requests, estimating accumulated capabilities,
+      and assessing the residual risk of additional responses. Such monitors must reason over semantic
+      dependencies, distinguish malicious composition from legitimate multi-step tasks, and face an
+      inherently incomplete observation environment in which attackers may distribute consultations
+      across multiple accounts and providers.</p>
+    <p><strong>Raising the cost of running an unaligned harness.</strong> This attack scales because
+      open-weight models are cheap to unalign (e.g., via abliteration or fine-tuning) and can automate
+      composition locally. Making open models resistant to inexpensive unalignment raises the
+      operator&rsquo;s required capability and effort. Unalignment defenses should be judged not just by
+      refusal rates but by whether models retain the long-horizon planning required to orchestrate
+      complex attacks such as capability laundering.</p>
     <p><strong>Evaluate composition as its own safety property.</strong> Passing a jailbreak evaluation
       does not establish safety under decomposition. Model evaluations should include end-to-end tests in
       which individually permitted assistance is composed outside the model&rsquo;s context, and report
@@ -572,12 +577,11 @@
       challenges or benchmark-provided vulnerable revisions. We did not probe production systems, target
       third parties, or search for undisclosed vulnerabilities. The CBRN study involved model-generated
       text and rubric assessment only.</p>
-    <p><strong>What we release.</strong> We publicly release the complete alignment prompt used in our
-      experiments, but not the capability-laundering implementation or automation code &mdash; an
-      unrestricted release would materially reduce the effort required to reproduce the attack at scale.
-      To support scientific verification, we provide the implementation and experimental artifacts to
-      qualified researchers through a controlled-access process; requests are evaluated for a legitimate
-      research purpose.
+    <p><strong>What we release.</strong> We publicly release the full alignment prompts used in our
+      experiments, but not the capability laundering implementation or code. We believe a public code
+      release could increase the risk that this attack is used for malicious purposes. To support
+      scientific verification, we may provide the implementation and experimental artifacts to qualified
+      researchers. Requests are evaluated for legitimate research purposes.
       <!-- TODO: link the artifact-request form / contact address -->
     </p>
   </section>
