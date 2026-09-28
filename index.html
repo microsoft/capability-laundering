@@ -267,8 +267,8 @@
       <sup>3</sup>Microsoft Security Response Center</p>
 
     <nav class="links" aria-label="Paper resources">
-      <!-- TODO: fill arXiv href and artifact-access link before publishing -->
-      <a class="btn primary" href="#" aria-disabled="true">📄 arXiv</a>
+      <a class="btn primary" href="https://arxiv.org/abs/2609.15383">📄 arXiv</a>
+      <a class="btn" href="https://arxiv.org/pdf/2609.15383">PDF</a>
       <a class="btn" href="#artifacts">Artifact access</a>
       <a class="btn" href="#bibtex">BibTeX</a>
     </nav>
@@ -578,25 +578,29 @@
       third parties, or search for undisclosed vulnerabilities. The CBRN study involved model-generated
       text and rubric assessment only.</p>
     <p><strong>What we release.</strong> We publicly release the full alignment prompts used in our
-      experiments, but not the capability laundering implementation or code. We believe a public code
-      release could increase the risk that this attack is used for malicious purposes. To support
-      scientific verification, we may provide the implementation and experimental artifacts to qualified
-      researchers. Requests are evaluated for legitimate research purposes.
-      <!-- TODO: link the artifact-request form / contact address -->
+      experiments (their structure is documented in the appendix of the
+      <a href="https://arxiv.org/abs/2609.15383">paper</a>), but not the capability laundering
+      implementation or code. We believe a public code release could increase the risk that this attack
+      is used for malicious purposes. To support scientific verification, we may provide the
+      implementation and experimental artifacts to qualified researchers. Requests are evaluated for
+      legitimate research purposes; to request access, email
+      <a href="mailto:Mark.Russinovich@microsoft.com?subject=Capability%20laundering%20artifact%20request">the authors</a>.
     </p>
   </section>
 
   <!-- ============================ BIBTEX ============================ -->
   <section id="bibtex">
     <h2>Citation</h2>
-<!-- TODO: finalize venue/eprint before publishing -->
-<pre>@article{russinovich2026capabilitylaundering,
-  title   = {Divide, Consult, Conquer: Capability Laundering
-             Through Aligned LLMs},
-  author  = {Russinovich, Mark and Bullwinkel, Blake and Severi, Giorgio
-             and Ovadiuc, Cristian and Salem, Ahmed},
-  year    = {2026},
-  note    = {Under submission}
+<pre>@misc{russinovich2026capabilitylaundering,
+  title         = {Divide, Consult, Conquer: Capability Laundering
+                   Through Aligned LLMs},
+  author        = {Russinovich, Mark and Bullwinkel, Blake and Severi, Giorgio
+                   and Ovadiuc, Cristian and Salem, Ahmed},
+  year          = {2026},
+  eprint        = {2609.15383},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CR},
+  url           = {https://arxiv.org/abs/2609.15383}
 }</pre>
   </section>
 
