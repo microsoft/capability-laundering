@@ -7,8 +7,8 @@ public repo, Azure Static Web Apps, etc.).
 
 ## Before publishing — placeholders to fill (marked `TODO` in index.html)
 
-1. ~~**arXiv button**~~ — resolved: points at
-   [arXiv:2609.15383](https://arxiv.org/abs/2609.15383) (plus a PDF button).
+1. ~~**arXiv button**~~ — resolved: a single "Paper" button points at the
+   [arXiv PDF](https://arxiv.org/pdf/2609.15383).
 2. ~~**Artifact access**~~ — resolved: artifact requests go to the first
    author's email (mailto link in the "Responsible disclosure & artifacts"
    section).
